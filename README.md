@@ -19,38 +19,39 @@ Using `pip` also installs `xmltodict` and `ncclient` that are required.
 
 Clone this repository, modify your PYTHONPATH, and do all that fun stuff!
 
-# Connecting to device
+# User guide
+
+## Connecting to device
 
 ```python
 >>> 
->>> from pyskate import IOSXEDevice
+>>> from pyskate.iosxe_netconf import IOSXEDevice
 >>> 
 >>> router = IOSXEDevice('hostname','username','password')
 >>> router.connect()
 ```
 
-# Disconnecting from device
+## Disconnecting from device
 
 ```python
->>> 
 >>> router.disconnect()
 ```
-# Retrieving running configuration
+## Retrieving running configuration
 ```python
 >>> config = router.get_config()
 
 ```
-# Editing running configuration 
+## Editing running configuration 
 ```python
 >>> router.edit_config("interface Gi1\ndescription spam")
 
 ```
-# Saving running configuration to startup configuration
+## Saving running configuration to startup configuration
 ```python
 >>> router.save_config()
 
 ```
-# Executing command
+## Executing command
 ```python
 >>> cmd_output = router.exec_command("show interface")
 

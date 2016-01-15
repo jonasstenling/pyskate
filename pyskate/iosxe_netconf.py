@@ -2,6 +2,7 @@
 
 from ncclient import manager
 from ncclient.transport.errors import TransportError
+from ncclient.operations.rpc import RPCError
 import xmltodict
 
 def reconnect_device(func):
@@ -20,6 +21,23 @@ def reconnect_device(func):
         else:
             return func(self, *args, **kwargs)
     return inner
+
+
+class IfMissingError(Exception):
+    '''raise if interface is missing in router'''
+    pass
+
+class BGPMissingError(Exception):
+    '''raise if BGP configuration is missing in router'''
+    pass
+
+class VRFMissingError(Exception):
+    '''raise if VRF configuration is missing in router'''
+    pass
+
+class ConfigDeployError(Exception):
+    '''raise if configuration could not be deployed to router'''
+    pass
 
 class IOSXEDevice(object):
     '''Implements methods for configuration retrieval and update'''
@@ -45,27 +63,6 @@ class IOSXEDevice(object):
             self.handle.close_session()
         except TransportError:
             return True # already disconnected
-
-#
-# This function doesn't work as expected, filtered configuration
-# is returned truncated at the top. Troubleshooting ongoing.
-#
-    @reconnect_device
-    def get_config_with_filter(self, netconf_filter):
-        '''Returns filtered running config in device as list
-           Filter is specified as "| ?
-               exclude
-               include
-               section"
-           E.g. "| section ^interface" for all interface configuration'''
-        netconf_filter = """
-<filter>
-<config-format-text-cmd>
-<text-filter-spec>{netconf_filter}</text-filter-spec>
-</config-format-text-cmd>
-</filter>""".format(netconf_filter=netconf_filter)
-        response = xmltodict.parse(self.handle.get(netconf_filter).xml)
-        return response['rpc-reply']['data']['cli-config-data']['cmd']
 
     @reconnect_device
     def get_config(self):
@@ -100,11 +97,78 @@ class IOSXEDevice(object):
 {commands}
 </cli-config-data-block>
 </config>""".format(commands=commands)
-        response = xmltodict.parse(
-            self.handle.edit_config(target='running', config=config).xml)
-        return 'ok' in response['rpc-reply'] # Got <ok /> tag
+        try:
+            response = xmltodict.parse(
+                self.handle.edit_config(target='running', config=config).xml)
+            return 'ok' in response['rpc-reply'] # Got <ok /> tag
+        except RPCError:
+            raise ConfigDeployError
 
     @reconnect_device
     def save_config(self):
         '''Returns true if save of running configuration is successful.'''
         return '[OK]' in self.exec_command('copy running startup')
+
+    def get_interface_config(self, interface_name):
+        '''Return configuration for *interface_name*'''
+        config = self.get_config()
+        interface_config = None
+        in_interface = False
+        for line in config:
+            if not in_interface:
+                if line.startswith('interface {interface_name}'.format(
+                        interface_name=interface_name)):
+                    interface_config = [line]
+                    in_interface = True
+            else:
+                if line.startswith('!'): # end of interface block
+                    break
+                else:
+                    interface_config.append(line)
+
+        if interface_config is None:
+            raise IfMissingError
+        else:
+            return [x.strip('\n') for x in interface_config]
+
+    def get_bgp_config(self):
+        '''Return bgp configuration in device'''
+        config = self.get_config()
+        bgp_config = None
+        in_bgp = False
+        for line in config:
+            if not in_bgp:
+                if line.startswith('router bgp'):
+                    bgp_config = [line]
+                    in_bgp = True
+            else:
+                if line.startswith('!'): # end of router bgp block
+                    break
+                else:
+                    bgp_config.append(line)
+
+        if bgp_config is None:
+            raise BGPMissingError
+        else:
+            return [x.strip('\n') for x in bgp_config]
+
+    def get_vrf_definition_config(self, vrf_name):
+        '''Return vrf definition configuration in device'''
+        config = self.get_config()
+        vrf_definition_config = None
+        in_vrf_definition = False
+        for line in config:
+            if not in_vrf_definition:
+                if line.startswith('vrf definition {0}'.format(vrf_name)):
+                    vrf_definition_config = [line]
+                    in_vrf_definition = True
+            else:
+                if line.startswith('!'): # end of vrf definition block
+                    break
+                else:
+                    vrf_definition_config.append(line)
+
+        if vrf_definition_config is None:
+            raise VRFMissingError
+        else:
+            return [x.strip('\n') for x in vrf_definition_config]

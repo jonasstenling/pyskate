@@ -116,7 +116,7 @@ class IOSXEDevice(object):
         in_interface = False
         for line in config:
             if not in_interface:
-                if line.startswith('interface {interface_name}'.format(
+                if line == ('interface {interface_name}'.format(
                         interface_name=interface_name)):
                     interface_config = [line]
                     in_interface = True
@@ -159,7 +159,7 @@ class IOSXEDevice(object):
         in_vrf_definition = False
         for line in config:
             if not in_vrf_definition:
-                if line.startswith('vrf definition {0}'.format(vrf_name)):
+                if line == ('vrf definition {0}'.format(vrf_name)):
                     vrf_definition_config = [line]
                     in_vrf_definition = True
             else:
